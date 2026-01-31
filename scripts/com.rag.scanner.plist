@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Unique identifier for this scheduled task -->
+    <key>Label</key>
+    <string>com.rag.scanner</string>
+    
+    <!-- Description -->
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Python path - adjust if using virtual environment -->
+        <string>/usr/bin/python3</string>
+        <!-- Full path to the watcher script with --scan-now flag -->
+        <string>__RAG_PROJECT_PATH__/scripts/watcher.py</string>
+        <string>--scan-now</string>
+    </array>
+    
+    <!-- Working directory -->
+    <key>WorkingDirectory</key>
+    <string>__RAG_PROJECT_PATH__</string>
+    
+    <!-- Run daily at 3:00 AM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <!-- Also run when the computer wakes up (if it missed the scheduled time) -->
+    <key>StartOnMount</key>
+    <false/>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+        <!-- Add your virtual environment path here if needed -->
+        <!-- <key>VIRTUAL_ENV</key>
+        <string>/path/to/your/venv</string> -->
+    </dict>
+    
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>__RAG_PROJECT_PATH__/data/scanner.log</string>
+    <key>StandardErrorPath</key>
+    <string>__RAG_PROJECT_PATH__/data/scanner_error.log</string>
+    
+    <!-- Run with low priority to avoid impacting system performance -->
+    <key>LowPriorityIO</key>
+    <true/>
+    <key>ProcessType</key>
+    <string>Background</string>
+    
+    <!-- Don't run if on battery power (optional, remove if you want it to run anyway) -->
+    <!-- <key>LowPriorityBackgroundIO</key>
+    <true/> -->
+</dict>
+</plist>

@@ -1,28 +1,32 @@
 #!/usr/bin/env python3
 """
-Document Watcher for Incremental Indexing.
+Device-Wide Document Watcher with Scheduled Scanning.
 
-Watches the /docs folder for new or modified files and automatically
-updates the FAISS index without requiring a full rebuild.
+Watches configured directories for new or modified files and automatically
+updates the FAISS index. Supports both real-time watching and scheduled
+full scans for comprehensive indexing.
 
 Usage:
-    python scripts/watcher.py
+    python scripts/watcher.py              # Run watcher with default config
+    python scripts/watcher.py --scan-now   # Run immediate full scan
+    python scripts/watcher.py --stats      # Show indexing statistics
 
 Features:
-- Watches for new files
-- Watches for modified files
-- Watches for deleted files
-- Updates index incrementally
-- Supports PDF, DOCX, TXT files
+- Watches multiple directories from scanner_config.yaml
+- Real-time file change detection with debouncing
+- Scheduled full scans (default: every 24 hours)
+- Differential indexing (only processes changed files)
+- Security filtering (respects exclusion patterns)
+- Supports all file types including images via vision API
 """
 from __future__ import annotations
 
-import hashlib
-import json
+import argparse
 import sys
+import threading
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
-from datetime import datetime
 
 # Add project root to path
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -31,264 +35,483 @@ if str(ROOT_DIR) not in sys.path:
 
 try:
     from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileModifiedEvent, FileDeletedEvent
+    from watchdog.events import FileSystemEventHandler
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
     print("⚠️  watchdog not installed. Install with: pip install watchdog")
 
-from app.config import DOCS_PATH, DATA_DIR, INDEX_PATH, ensure_data_dir
-from app.ingestion import DocumentIngester
-from app.chunker import chunk_by_sentences
+from app.config import INDEX_PATH, DATA_DIR, ensure_data_dir
+from app.ingestion import DocumentIngester, SUPPORTED_EXTENSIONS, IMAGE_EXTENSIONS
+from app.chunker import chunk
 from app.embeddings import EmbeddingGenerator
 from app.vector_store import FAISSVectorStore
+from app.scanner import FileScanner, ScanManifest, ScannedFile
+from app.scanner_config import get_config, reload_config, ScannerConfig
+
+# Import security/audit if available
+try:
+    from app.security import get_audit_logger
+    AUDIT_AVAILABLE = True
+except ImportError:
+    AUDIT_AVAILABLE = False
 
 
-# File to track indexed documents
-MANIFEST_PATH = DATA_DIR / "index_manifest.json"
-
-
-class IndexManifest:
-    """Track which files have been indexed and their hashes."""
+class DeviceIndexer:
+    """
+    Handles indexing files from across the device.
     
-    def __init__(self):
-        self.manifest: dict[str, dict] = {}
-        self.load()
+    Supports both incremental (single file) and batch indexing modes.
+    Uses differential indexing to skip unchanged files.
+    Includes audit logging for transparency.
+    """
     
-    def load(self):
-        """Load manifest from disk."""
-        if MANIFEST_PATH.exists():
-            try:
-                with open(MANIFEST_PATH, "r") as f:
-                    self.manifest = json.load(f)
-            except Exception as e:
-                print(f"⚠️  Failed to load manifest: {e}")
-                self.manifest = {}
-    
-    def save(self):
-        """Save manifest to disk."""
-        ensure_data_dir()
-        with open(MANIFEST_PATH, "w") as f:
-            json.dump(self.manifest, f, indent=2)
-    
-    def get_file_hash(self, filepath: Path) -> str:
-        """Calculate hash of a file."""
-        hasher = hashlib.md5()
-        with open(filepath, "rb") as f:
-            for chunk in iter(lambda: f.read(8192), b""):
-                hasher.update(chunk)
-        return hasher.hexdigest()
-    
-    def needs_indexing(self, filepath: Path) -> bool:
-        """Check if a file needs to be (re)indexed."""
-        if not filepath.exists():
-            return False
+    def __init__(self, config: ScannerConfig | None = None):
+        self.config = config or get_config()
+        self.scanner = FileScanner(self.config)
+        self.manifest = self.scanner.manifest
         
-        key = str(filepath)
-        if key not in self.manifest:
-            return True
+        # Use local_only mode from config
+        local_only = getattr(self.config, 'local_only_mode', False)
+        self.ingester = DocumentIngester(Path.home() / "Documents", local_only=local_only)
         
-        current_hash = self.get_file_hash(filepath)
-        return self.manifest[key].get("hash") != current_hash
-    
-    def mark_indexed(self, filepath: Path, chunk_count: int):
-        """Mark a file as indexed."""
-        key = str(filepath)
-        self.manifest[key] = {
-            "hash": self.get_file_hash(filepath),
-            "indexed_at": datetime.now().isoformat(),
-            "chunk_count": chunk_count,
-        }
-        self.save()
-    
-    def mark_deleted(self, filepath: Path):
-        """Mark a file as deleted."""
-        key = str(filepath)
-        if key in self.manifest:
-            del self.manifest[key]
-            self.save()
-    
-    def get_all_indexed_files(self) -> set[str]:
-        """Get all indexed file paths."""
-        return set(self.manifest.keys())
-
-
-class IncrementalIndexer:
-    """Handles incremental index updates."""
-    
-    def __init__(self):
-        self.manifest = IndexManifest()
-        self.ingester = DocumentIngester(str(DOCS_PATH))
         self.embedder = EmbeddingGenerator()
         self.store: FAISSVectorStore | None = None
         self._load_or_create_store()
+        self._lock = threading.Lock()
+        
+        # Initialize audit logger if enabled
+        self.audit = None
+        if AUDIT_AVAILABLE and getattr(self.config, 'enable_audit_logging', True):
+            try:
+                self.audit = get_audit_logger(DATA_DIR)
+            except Exception:
+                pass
     
-    def _load_or_create_store(self):
-        """Load existing store or create new one."""
+    def _load_or_create_store(self) -> None:
+        """Load existing vector store or prepare to create new one."""
         try:
             self.store = FAISSVectorStore.load(INDEX_PATH)
             print(f"✅ Loaded existing index ({self.store.index.ntotal} vectors)")
         except Exception:
-            # Will create on first add
             self.store = None
+            print("ℹ️  No existing index found, will create on first file")
     
-    def index_file(self, filepath: Path) -> int:
-        """Index a single file. Returns number of chunks added."""
-        if not filepath.exists():
-            return 0
+    def index_file(self, file_path: Path, force: bool = False) -> int:
+        """
+        Index a single file.
         
-        print(f"📄 Indexing: {filepath.name}")
+        Args:
+            file_path: Path to the file to index
+            force: If True, index even if file hasn't changed
         
-        # Ingest document
-        try:
-            content = self.ingester._read_file(filepath)
-            if not content or len(content.split()) < 10:
-                print(f"   ⚠️  No content extracted")
+        Returns:
+            Number of chunks added to the index.
+        """
+        with self._lock:
+            if not file_path.exists():
                 return 0
-        except Exception as e:
-            print(f"   ❌ Failed to extract: {e}")
-            return 0
-        
-        # Chunk
-        chunks = list(chunk_by_sentences(content, target_words=200, overlap_words=40))
-        if not chunks:
-            print(f"   ⚠️  No chunks produced")
-            return 0
-        
-        # Prepare metadata
-        texts = []
-        metas = []
-        for i, chunk_text in enumerate(chunks):
-            if len(chunk_text.split()) < 10:
-                continue
-            texts.append(chunk_text)
-            metas.append({
-                "text": chunk_text,
-                "filename": filepath.name,
-                "filepath": str(filepath),
-                "chunk_index": i,
-            })
-        
-        if not texts:
-            return 0
-        
-        # Embed
-        embeddings = self.embedder.embed(texts)
-        
-        # Add to store
-        if self.store is None:
-            self.store = FAISSVectorStore(embeddings.shape[1])
-        
-        self.store.add(embeddings, metas)
-        self.store.save(INDEX_PATH)
-        
-        # Update manifest
-        self.manifest.mark_indexed(filepath, len(texts))
-        
-        print(f"   ✅ Added {len(texts)} chunks")
-        return len(texts)
+            
+            # Check if indexing is needed
+            if not force and not self.manifest.needs_indexing(file_path):
+                return 0
+            
+            print(f"📄 Indexing: {file_path.name}")
+            
+            # Read file content
+            try:
+                content = self.ingester._read_file(file_path)
+                if not content or len(content.split()) < 10:
+                    print(f"   ⚠️  No content extracted from {file_path.name}")
+                    return 0
+            except Exception as e:
+                print(f"   ❌ Failed to read {file_path.name}: {e}")
+                return 0
+            
+            # Chunk the content
+            chunks = list(chunk(content, chunk_size=240, overlap=40))
+            if not chunks:
+                print(f"   ⚠️  No chunks produced from {file_path.name}")
+                return 0
+            
+            # Filter small chunks and prepare metadata
+            texts = []
+            metas = []
+            for i, chunk_text in enumerate(chunks):
+                if len(chunk_text.split()) < 10:
+                    continue
+                texts.append(chunk_text)
+                metas.append({
+                    "text": chunk_text,
+                    "filename": file_path.name,
+                    "filepath": str(file_path),
+                    "chunk_index": i,
+                    "indexed_at": datetime.now().isoformat(),
+                })
+            
+            if not texts:
+                return 0
+            
+            # Generate embeddings
+            embeddings = self.embedder.embed(texts)
+            
+            # Add to vector store
+            if self.store is None:
+                self.store = FAISSVectorStore(embeddings.shape[1])
+            
+            self.store.add(embeddings, metas)
+            self.store.save(INDEX_PATH)
+            
+            # Update manifest
+            self.manifest.mark_indexed(file_path, len(texts))
+            self.manifest.save()
+            
+            # Audit log
+            if self.audit:
+                self.audit.log_file_indexed(str(file_path), len(texts))
+            
+            print(f"   ✅ Added {len(texts)} chunks")
+            return len(texts)
     
-    def remove_file(self, filepath: Path):
-        """Remove a file from the index (marks as deleted)."""
-        print(f"🗑️  Removing from index: {filepath.name}")
-        self.manifest.mark_deleted(filepath)
-        # Note: FAISS doesn't support deletion, so we just mark in manifest
-        # Full rebuild will be needed to actually remove vectors
+    def index_batch(self, files: list[ScannedFile]) -> tuple[int, int]:
+        """
+        Index a batch of files.
+        
+        Args:
+            files: List of ScannedFile objects to index
+        
+        Returns:
+            Tuple of (files_processed, total_chunks_added)
+        """
+        files_processed = 0
+        total_chunks = 0
+        
+        for scanned_file in files:
+            try:
+                chunks = self.index_file(scanned_file.path)
+                if chunks > 0:
+                    files_processed += 1
+                    total_chunks += chunks
+                
+                # Pause between files to avoid overwhelming system
+                if self.config.batch_pause_seconds > 0:
+                    time.sleep(self.config.batch_pause_seconds)
+            
+            except Exception as e:
+                print(f"   ❌ Error indexing {scanned_file.path.name}: {e}")
+        
+        return files_processed, total_chunks
     
-    def check_and_index_all(self):
-        """Check all files and index those that need it."""
-        if not DOCS_PATH.exists():
-            print(f"⚠️  Docs folder not found: {DOCS_PATH}")
-            return
+    def run_full_scan(self) -> tuple[int, int]:
+        """
+        Run a full scan of all configured directories.
         
-        indexed_count = 0
+        Returns:
+            Tuple of (files_processed, total_chunks_added)
+        """
+        print("\n" + "=" * 60)
+        print("🔍 Starting full device scan...")
+        print("=" * 60)
         
-        for filepath in DOCS_PATH.iterdir():
-            if filepath.suffix.lower() in {".pdf", ".docx", ".txt", ".md"}:
-                if self.manifest.needs_indexing(filepath):
-                    chunks = self.index_file(filepath)
-                    indexed_count += chunks
+        # Get list of files needing indexing
+        files_to_index = list(self.scanner.scan_for_changes())
         
-        if indexed_count > 0:
-            print(f"\n✅ Indexed {indexed_count} new chunks")
-        else:
-            print("✅ Index is up to date")
+        if not files_to_index:
+            print("✅ All files are up to date!")
+            self.manifest.mark_full_scan_complete()
+            return 0, 0
+        
+        print(f"📋 Found {len(files_to_index)} files to index")
+        
+        # Process in batches
+        batch_size = self.config.batch_size
+        files_processed = 0
+        total_chunks = 0
+        
+        for i in range(0, len(files_to_index), batch_size):
+            batch = files_to_index[i:i + batch_size]
+            print(f"\n📦 Processing batch {i // batch_size + 1}/{(len(files_to_index) + batch_size - 1) // batch_size}")
+            
+            processed, chunks = self.index_batch(batch)
+            files_processed += processed
+            total_chunks += chunks
+        
+        # Check for deleted files
+        deleted = self.scanner.find_deleted_files()
+        if deleted:
+            print(f"\n🗑️  Marking {len(deleted)} deleted files")
+            for path in deleted:
+                self.manifest.mark_deleted(Path(path))
+            self.manifest.save()
+        
+        self.manifest.mark_full_scan_complete()
+        
+        print("\n" + "=" * 60)
+        print(f"✅ Full scan complete!")
+        print(f"   Files processed: {files_processed}")
+        print(f"   Chunks added: {total_chunks}")
+        print("=" * 60)
+        
+        return files_processed, total_chunks
+    
+    def remove_file(self, file_path: Path) -> None:
+        """Mark a file as deleted in the manifest."""
+        with self._lock:
+            print(f"🗑️  Removing from index: {file_path.name}")
+            self.manifest.mark_deleted(file_path)
+            self.manifest.save()
+            
+            # Audit log
+            if self.audit:
+                self.audit.log_file_deleted(str(file_path))
+            
+            # Note: FAISS doesn't support deletion, vectors remain until rebuild
+    
+    def get_stats(self) -> dict:
+        """Get indexing statistics."""
+        stats = self.manifest.get_stats()
+        if self.store:
+            stats["vector_count"] = self.store.index.ntotal
+        stats["scan_directories"] = [str(d) for d in self.config.get_scan_directories()]
+        return stats
 
 
-class DocumentEventHandler(FileSystemEventHandler):
-    """Handle file system events for automatic indexing."""
+class MultiDirectoryEventHandler(FileSystemEventHandler):
+    """
+    Handle file system events for automatic indexing across multiple directories.
     
-    def __init__(self, indexer: IncrementalIndexer):
+    Implements debouncing to batch rapid file changes.
+    """
+    
+    def __init__(self, indexer: DeviceIndexer, config: ScannerConfig):
         self.indexer = indexer
-        self._debounce: dict[str, float] = {}
+        self.config = config
+        self._pending: dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._debounce_thread: threading.Thread | None = None
+        self._running = True
     
-    def _should_process(self, path: str) -> bool:
-        """Check if we should process this event (debounce)."""
-        now = time.time()
-        last = self._debounce.get(path, 0)
-        if now - last < 2.0:  # 2 second debounce
-            return False
-        self._debounce[path] = now
-        return True
+    def start_debounce_processor(self) -> None:
+        """Start background thread to process debounced events."""
+        self._debounce_thread = threading.Thread(target=self._process_pending, daemon=True)
+        self._debounce_thread.start()
+    
+    def stop(self) -> None:
+        """Stop the debounce processor."""
+        self._running = False
+        if self._debounce_thread:
+            self._debounce_thread.join(timeout=2)
+    
+    def _process_pending(self) -> None:
+        """Background thread to process pending file changes."""
+        while self._running:
+            time.sleep(1)
+            
+            with self._lock:
+                now = time.time()
+                ready = [
+                    path for path, timestamp in self._pending.items()
+                    if now - timestamp >= self.config.watcher_debounce_seconds
+                ]
+                
+                for path in ready:
+                    del self._pending[path]
+            
+            # Process ready files outside the lock
+            for path in ready:
+                file_path = Path(path)
+                if file_path.exists():
+                    self.indexer.index_file(file_path)
     
     def _is_valid_file(self, path: str) -> bool:
-        """Check if file should be indexed."""
-        p = Path(path)
-        return p.suffix.lower() in {".pdf", ".docx", ".txt", ".md"}
+        """Check if file should be indexed based on config."""
+        file_path = Path(path)
+        
+        # Check extension
+        if file_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            return False
+        
+        # Check exclusions
+        if self.config.is_file_excluded(file_path):
+            return False
+        
+        # Check directory exclusions
+        if self.config.is_directory_excluded(file_path.parent):
+            return False
+        
+        return True
+    
+    def _queue_file(self, path: str) -> None:
+        """Add file to pending queue with current timestamp."""
+        with self._lock:
+            self._pending[path] = time.time()
     
     def on_created(self, event):
         if event.is_directory or not self._is_valid_file(event.src_path):
             return
-        if self._should_process(event.src_path):
-            print(f"\n📥 New file detected: {Path(event.src_path).name}")
-            self.indexer.index_file(Path(event.src_path))
+        print(f"\n📥 New file detected: {Path(event.src_path).name}")
+        self._queue_file(event.src_path)
     
     def on_modified(self, event):
         if event.is_directory or not self._is_valid_file(event.src_path):
             return
-        if self._should_process(event.src_path):
-            filepath = Path(event.src_path)
-            if self.indexer.manifest.needs_indexing(filepath):
-                print(f"\n📝 File modified: {filepath.name}")
-                self.indexer.index_file(filepath)
+        print(f"\n📝 File modified: {Path(event.src_path).name}")
+        self._queue_file(event.src_path)
     
     def on_deleted(self, event):
         if event.is_directory or not self._is_valid_file(event.src_path):
             return
         print(f"\n🗑️  File deleted: {Path(event.src_path).name}")
         self.indexer.remove_file(Path(event.src_path))
+    
+    def on_moved(self, event):
+        if event.is_directory:
+            return
+        
+        # Handle source (treat as deleted)
+        if self._is_valid_file(event.src_path):
+            print(f"\n🗑️  File moved from: {Path(event.src_path).name}")
+            self.indexer.remove_file(Path(event.src_path))
+        
+        # Handle destination (treat as created)
+        if self._is_valid_file(event.dest_path):
+            print(f"\n📥 File moved to: {Path(event.dest_path).name}")
+            self._queue_file(event.dest_path)
 
 
-def run_watcher():
-    """Run the file watcher."""
-    print("=" * 50)
-    print("📂 Document Watcher")
-    print("=" * 50)
+class ScheduledScanner:
+    """
+    Runs periodic full scans at configured intervals.
+    """
+    
+    def __init__(self, indexer: DeviceIndexer, config: ScannerConfig):
+        self.indexer = indexer
+        self.config = config
+        self._thread: threading.Thread | None = None
+        self._running = False
+        self._next_scan: datetime | None = None
+    
+    def start(self) -> None:
+        """Start the scheduled scanner."""
+        if self.config.full_scan_interval_hours <= 0:
+            print("ℹ️  Scheduled scanning disabled (interval = 0)")
+            return
+        
+        self._running = True
+        self._calculate_next_scan()
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+        print(f"⏰ Scheduled scan every {self.config.full_scan_interval_hours} hours")
+        print(f"   Next scan: {self._next_scan.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    def stop(self) -> None:
+        """Stop the scheduled scanner."""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=5)
+    
+    def _calculate_next_scan(self) -> None:
+        """Calculate when the next scan should run."""
+        interval = timedelta(hours=self.config.full_scan_interval_hours)
+        
+        # Check last scan time from manifest
+        last_scan_str = self.indexer.manifest.last_full_scan
+        if last_scan_str:
+            try:
+                last_scan = datetime.fromisoformat(last_scan_str)
+                self._next_scan = last_scan + interval
+                
+                # If next scan is in the past, schedule for soon
+                if self._next_scan < datetime.now():
+                    self._next_scan = datetime.now() + timedelta(minutes=5)
+                return
+            except ValueError:
+                pass
+        
+        # No previous scan, schedule one in 5 minutes
+        self._next_scan = datetime.now() + timedelta(minutes=5)
+    
+    def _run_loop(self) -> None:
+        """Background loop to trigger scans."""
+        while self._running:
+            time.sleep(60)  # Check every minute
+            
+            if self._next_scan and datetime.now() >= self._next_scan:
+                print(f"\n⏰ Scheduled scan triggered at {datetime.now().strftime('%H:%M:%S')}")
+                self.indexer.run_full_scan()
+                self._calculate_next_scan()
+                if self._running:
+                    print(f"⏰ Next scan: {self._next_scan.strftime('%Y-%m-%d %H:%M:%S')}")
+
+
+def run_watcher() -> None:
+    """Run the multi-directory file watcher with scheduled scanning."""
+    if not WATCHDOG_AVAILABLE:
+        print("Cannot run watcher without watchdog installed.")
+        print("Install with: pip install watchdog")
+        sys.exit(1)
+    
+    config = get_config()
+    
+    print("=" * 60)
+    print("📂 Device-Wide Document Watcher")
+    print("=" * 60)
     print()
-    print(f"Watching: {DOCS_PATH}")
-    print("Supported: .pdf, .docx, .txt, .md")
+    
+    # Show configured directories
+    scan_dirs = config.get_scan_directories()
+    if not scan_dirs:
+        print("❌ No scan directories configured or accessible!")
+        print("   Edit scanner_config.yaml to add directories.")
+        sys.exit(1)
+    
+    print("Watching directories:")
+    for d in scan_dirs:
+        print(f"  • {d}")
+    print()
+    print(f"Supported extensions: {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
     print()
     print("Press Ctrl+C to stop")
     print()
     
-    # Ensure docs folder exists
-    DOCS_PATH.mkdir(parents=True, exist_ok=True)
+    # Ensure data directory exists
+    ensure_data_dir()
     
     # Initialize indexer
-    indexer = IncrementalIndexer()
+    indexer = DeviceIndexer(config)
     
-    # Check existing files
+    # Run initial check for new files
     print("🔍 Checking for new/modified files...")
-    indexer.check_and_index_all()
+    files_to_check = list(indexer.scanner.scan_for_changes())
+    if files_to_check:
+        print(f"   Found {len(files_to_check)} files to index")
+        indexer.index_batch(files_to_check)
+    else:
+        print("   All files up to date")
     print()
     
-    # Start watcher
-    event_handler = DocumentEventHandler(indexer)
-    observer = Observer()
-    observer.schedule(event_handler, str(DOCS_PATH), recursive=False)
-    observer.start()
+    # Set up file watcher
+    event_handler = MultiDirectoryEventHandler(indexer, config)
+    event_handler.start_debounce_processor()
     
-    print("👀 Watching for changes...")
+    observer = Observer()
+    for scan_dir in scan_dirs:
+        try:
+            observer.schedule(
+                event_handler,
+                str(scan_dir),
+                recursive=config.recursive
+            )
+            print(f"👀 Watching: {scan_dir}")
+        except Exception as e:
+            print(f"⚠️  Cannot watch {scan_dir}: {e}")
+    
+    observer.start()
+    print()
+    
+    # Start scheduled scanner
+    scheduler = ScheduledScanner(indexer, config)
+    scheduler.start()
     print()
     
     try:
@@ -297,18 +520,76 @@ def run_watcher():
     except KeyboardInterrupt:
         print("\n👋 Stopping watcher...")
         observer.stop()
+        event_handler.stop()
+        scheduler.stop()
     
     observer.join()
+    print("Goodbye!")
 
 
-def main():
-    """Main entry point."""
-    if not WATCHDOG_AVAILABLE:
-        print("Cannot run watcher without watchdog installed.")
-        print("Install with: pip install watchdog")
-        sys.exit(1)
+def run_full_scan_now() -> None:
+    """Run an immediate full scan without starting the watcher."""
+    config = get_config()
+    indexer = DeviceIndexer(config)
+    indexer.run_full_scan()
+
+
+def show_stats() -> None:
+    """Display indexing statistics."""
+    config = get_config()
+    indexer = DeviceIndexer(config)
+    stats = indexer.get_stats()
     
-    run_watcher()
+    print("=" * 60)
+    print("📊 Indexing Statistics")
+    print("=" * 60)
+    print()
+    print(f"Total files indexed: {stats.get('total_files', 0)}")
+    print(f"Total chunks: {stats.get('total_chunks', 0)}")
+    print(f"Total size: {stats.get('total_size_mb', 0)} MB")
+    print(f"Vectors in index: {stats.get('vector_count', 'N/A')}")
+    print()
+    print("Scan directories:")
+    for d in stats.get('scan_directories', []):
+        print(f"  • {d}")
+    print()
+    if stats.get('last_full_scan'):
+        print(f"Last full scan: {stats['last_full_scan']}")
+
+
+def main() -> None:
+    """Main entry point with CLI argument parsing."""
+    parser = argparse.ArgumentParser(
+        description="Device-wide document watcher and indexer"
+    )
+    parser.add_argument(
+        "--scan-now",
+        action="store_true",
+        help="Run immediate full scan without starting watcher"
+    )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="Show indexing statistics"
+    )
+    parser.add_argument(
+        "--reload-config",
+        action="store_true",
+        help="Reload configuration from scanner_config.yaml"
+    )
+    
+    args = parser.parse_args()
+    
+    if args.reload_config:
+        reload_config()
+        print("✅ Configuration reloaded")
+    
+    if args.stats:
+        show_stats()
+    elif args.scan_now:
+        run_full_scan_now()
+    else:
+        run_watcher()
 
 
 if __name__ == "__main__":

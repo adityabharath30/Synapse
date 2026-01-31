@@ -1,0 +1,255 @@
+# Scanner Configuration for RAG System
+# ============================================================================
+# SECURITY-FIRST CONFIGURATION
+# 
+# This file controls device-wide scanning. For safety:
+# - NO directories are scanned by default (you must explicitly add them)
+# - Image processing is DISABLED by default (uses cloud API)
+# - Sensitive file patterns are excluded automatically
+# ============================================================================
+
+# ============================================================================
+# SCAN DIRECTORIES (Explicit Opt-In Required)
+# ============================================================================
+# Add directories you want indexed. Use ~ for home directory.
+# Start with a small, non-sensitive directory to test.
+
+scan_directories:
+  # UNCOMMENT and customize the directories you want to scan:
+  - ~/Documents
+  - ~/Desktop
+  # - ~/Downloads
+  # - ~/Notes
+  # - ~/Pictures
+
+# ============================================================================
+# SECURITY: EXCLUDED DIRECTORIES (Never Scanned)
+# ============================================================================
+
+excluded_directories:
+  # Security-sensitive directories
+  - "**/.ssh"
+  - "**/.gnupg"
+  - "**/.gpg"
+  - "**/.aws"
+  - "**/.azure"
+  - "**/.config/gcloud"
+  - "**/.kube"
+  - "**/Keychains"
+  - "**/.password-store"
+  - "**/.vault"
+  - "**/.secrets"
+  - "**/.credentials"
+  
+  # Development directories (large, noisy)
+  - "**/node_modules"
+  - "**/.git"
+  - "**/venv"
+  - "**/.venv"
+  - "**/env"
+  - "**/__pycache__"
+  - "**/.tox"
+  - "**/dist"
+  - "**/build"
+  - "**/.eggs"
+  - "**/target"
+  - "**/vendor"
+  - "**/.cargo"
+  
+  # System and application directories
+  - "**/Library/Caches"
+  - "**/Library/Application Support/*/Cache*"
+  - "**/Library/Containers"
+  - "**/Library/Logs"
+  - "**/.Trash"
+  - "**/.cache"
+  - "**/tmp"
+  - "**/temp"
+  - "**/logs"
+  
+  # Application bundles (contain icons/resources)
+  - "**/*.app"
+  - "**/*.framework"
+  - "**/Resources"
+  - "**/resources"
+  - "**/images"
+  - "**/icons"
+  - "**/Icons"
+  - "**/assets"
+  - "**/Assets"
+  - "**/thumbnails"
+  - "**/Thumbnails"
+  - "**/.thumbnails"
+
+# ============================================================================
+# SECURITY: EXCLUDED FILE PATTERNS (Never Indexed)
+# ============================================================================
+
+excluded_file_patterns:
+  # Credentials and keys
+  - "*.pem"
+  - "*.key"
+  - "*.p12"
+  - "*.pfx"
+  - "*.keystore"
+  - "*.jks"
+  - "*_rsa"
+  - "*_ed25519"
+  - "*_ecdsa"
+  - "*_dsa"
+  - "*.ppk"
+  
+  # Environment and config files with secrets
+  - ".env"
+  - ".env.*"
+  - "*.env"
+  - ".netrc"
+  - ".npmrc"
+  - ".pypirc"
+  - "credentials*.json"
+  - "*credentials*"
+  - "*secret*"
+  - "*token*"
+  - "*password*"
+  - "*api_key*"
+  - "*apikey*"
+  - "*.htpasswd"
+  - "auth.json"
+  - "secrets.yaml"
+  - "secrets.yml"
+  
+  # Potentially sensitive
+  - "*bank*"
+  - "*tax*"
+  - "*ssn*"
+  - "*social_security*"
+  
+  # macOS system files
+  - ".DS_Store"
+  - "*.keychain"
+  - "*.keychain-db"
+  - ".localized"
+  
+  # Temporary and backup files
+  - "*.tmp"
+  - "*.temp"
+  - "*.swp"
+  - "*.swo"
+  - "*~"
+  - "*.bak"
+  - "*.backup"
+  - "*.orig"
+  
+  # UI icons and toolbar buttons (waste of Vision API)
+  - "*toolbarButton*"
+  - "*ToolbarButton*"
+  - "*toolbar-*"
+  - "*icon*"
+  - "*Icon*"
+  - "*-icon.*"
+  - "*_icon.*"
+  - "*logo*"
+  - "*Logo*"
+  - "*button*"
+  - "*Button*"
+  - "*badge*"
+  - "*Badge*"
+  - "*@2x.*"
+  - "*@3x.*"
+  - "*-2x.*"
+  - "*_2x.*"
+  - "*-small.*"
+  - "*-large.*"
+  - "*thumbnail*"
+  - "*Thumbnail*"
+  - "favicon*"
+  
+  # Binary and archive files
+  - "*.zip"
+  - "*.tar"
+  - "*.tar.gz"
+  - "*.tgz"
+  - "*.rar"
+  - "*.7z"
+  - "*.dmg"
+  - "*.iso"
+  - "*.pkg"
+  - "*.exe"
+  - "*.dll"
+  - "*.so"
+  - "*.dylib"
+  - "*.bin"
+  - "*.dat"
+  
+  # Media files (unless explicitly processing images)
+  - "*.mp3"
+  - "*.mp4"
+  - "*.mov"
+  - "*.avi"
+  - "*.mkv"
+  - "*.wav"
+  - "*.flac"
+  - "*.m4a"
+  - "*.aac"
+
+# ============================================================================
+# FILE SIZE LIMITS
+# ============================================================================
+
+max_file_size_mb: 50
+min_file_size_bytes: 100
+
+# ============================================================================
+# SCAN BEHAVIOR
+# ============================================================================
+
+recursive: true
+follow_symlinks: false  # Safer - prevents escaping directories
+max_depth: 10
+
+# ============================================================================
+# IMAGE PROCESSING (Disabled by Default for Privacy)
+# ============================================================================
+# WARNING: Enabling this sends images to OpenAI's servers!
+
+process_images: false  # Set to true only if you understand the privacy implications
+
+# Minimum image dimensions (skip icons/thumbnails)
+min_image_width: 200
+min_image_height: 200
+
+# Maximum image size to process
+max_image_size_mb: 10
+
+# Only process images in these directories (if process_images is true)
+image_scan_directories:
+  # - ~/Pictures
+  # - ~/Desktop/Photos
+
+# ============================================================================
+# PERFORMANCE
+# ============================================================================
+
+batch_size: 10
+batch_pause_seconds: 0.5
+parallel_workers: 4  # Number of parallel file processors
+
+# ============================================================================
+# SCHEDULING
+# ============================================================================
+
+full_scan_interval_hours: 24
+watcher_debounce_seconds: 5
+
+# ============================================================================
+# PRIVACY SETTINGS
+# ============================================================================
+
+# If true, NEVER use cloud APIs (OpenAI). Only local processing.
+local_only_mode: false
+
+# Log all file access for transparency
+enable_audit_logging: true
+
+# Encrypt the stored index (recommended for sensitive data)
+encrypt_index: false

@@ -7,6 +7,18 @@ data/
 *.metadata
 *.config
 
+# Personal documents (keep docs/README.md only)
+docs/*.pdf
+docs/*.docx
+docs/*.xlsx
+docs/*.csv
+docs/*.txt
+docs/*.jpg
+docs/*.jpeg
+docs/*.png
+docs/*.gif
+!docs/README.md
+
 # Python
 __pycache__/
 *.py[cod]
