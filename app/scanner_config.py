@@ -286,20 +286,25 @@ def load_config(config_path: Path | None = None) -> ScannerConfig:
     path = config_path or CONFIG_PATH
     raw = _load_yaml_config(path)
     
+    # Helper to safely get list values (YAML returns None for empty keys)
+    def get_list(key: str, default: list) -> list:
+        value = raw.get(key, default)
+        return value if value is not None else default
+    
     # Parse scan directories
     scan_dirs = []
-    for dir_str in raw.get("scan_directories", ["~/Documents", "~/Desktop"]):
+    for dir_str in get_list("scan_directories", ["~/Documents", "~/Desktop"]):
         scan_dirs.append(_expand_path(dir_str))
     
     # Parse image scan directories
     image_dirs = []
-    for dir_str in raw.get("image_scan_directories", []):
+    for dir_str in get_list("image_scan_directories", []):
         image_dirs.append(_expand_path(dir_str))
     
     return ScannerConfig(
         scan_directories=scan_dirs,
-        excluded_directories=raw.get("excluded_directories", []),
-        excluded_file_patterns=raw.get("excluded_file_patterns", []),
+        excluded_directories=get_list("excluded_directories", []),
+        excluded_file_patterns=get_list("excluded_file_patterns", []),
         max_file_size_mb=raw.get("max_file_size_mb", 50.0),
         min_file_size_bytes=raw.get("min_file_size_bytes", 100),
         recursive=raw.get("recursive", True),
