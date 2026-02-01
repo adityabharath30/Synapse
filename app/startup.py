@@ -13,6 +13,11 @@ import logging
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env file early so API keys are available
+load_dotenv()
+
 logger = logging.getLogger("rag")
 
 
