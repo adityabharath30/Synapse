@@ -1,8 +1,8 @@
 """
-Spotlight-Style Search UI.
+Synapse - Personal Semantic Search UI.
 
 A modern, keyboard-first interface for personal semantic search.
-Inspired by macOS Spotlight with a dark, minimal aesthetic.
+Dark, minimal aesthetic with streaming answers.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ except ImportError:
 
 
 # =============================================================================
-# COLOR SCHEME (Dark Spotlight-like)
+# COLOR SCHEME (Dark Synapse)
 # =============================================================================
 
 COLORS = {
@@ -58,8 +58,8 @@ COLORS = {
 # MODERN UI (CustomTkinter)
 # =============================================================================
 
-class ModernSpotlightUI:
-    """Modern Spotlight UI using CustomTkinter."""
+class ModernSynapseUI:
+    """Modern Synapse UI using CustomTkinter."""
 
     def __init__(self) -> None:
         # Initialize search service in background
@@ -82,7 +82,7 @@ class ModernSpotlightUI:
 
         # Create window
         self.root = ctk.CTk()
-        self.root.title("Spotlight Search")
+        self.root.title("Synapse")
         self.root.geometry("700x450")
         self.root.configure(fg_color=COLORS["bg"])
         
@@ -92,7 +92,7 @@ class ModernSpotlightUI:
         y = (self.root.winfo_screenheight() - 450) // 3
         self.root.geometry(f"700x450+{x}+{y}")
         
-        # Always on top, no titlebar for Spotlight feel
+        # Always on top, no titlebar for clean look
         self.root.attributes("-topmost", True)
         self.root.overrideredirect(False)  # Keep titlebar for now (can be removed)
         
@@ -603,7 +603,7 @@ class DocumentRow(ctk.CTkFrame):
 # FALLBACK UI (Standard Tkinter)
 # =============================================================================
 
-class FallbackSpotlightUI:
+class FallbackSynapseUI:
     """Fallback UI using standard tkinter (if CustomTkinter not available)."""
 
     def __init__(self) -> None:
@@ -613,7 +613,7 @@ class FallbackSpotlightUI:
         self._selected_index = 0
 
         self.root = tk.Tk()
-        self.root.title("Spotlight Search")
+        self.root.title("Synapse")
         self.root.geometry("700x400")
         self.root.configure(bg="#1e1e1e")
         self.root.attributes("-topmost", True)
@@ -733,14 +733,14 @@ class FallbackSpotlightUI:
 # =============================================================================
 
 def main():
-    """Launch the Spotlight UI."""
+    """Launch the Synapse UI."""
     if CTK_AVAILABLE:
-        print("Starting Modern Spotlight UI...")
-        app = ModernSpotlightUI()
+        print("Starting Synapse...")
+        app = ModernSynapseUI()
     else:
         print("CustomTkinter not found, using fallback UI...")
         print("Install with: pip install customtkinter")
-        app = FallbackSpotlightUI()
+        app = FallbackSynapseUI()
     
     app.run()
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-macOS App Builder for RAG Spotlight.
+macOS App Builder for Synapse.
 
 Creates a standalone .app bundle using PyInstaller.
 The resulting app can be distributed without requiring Python installation.
@@ -37,7 +37,7 @@ def create_spec_file() -> Path:
     """Create PyInstaller spec file."""
     spec_content = f'''# -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec file for RAG Spotlight.
+PyInstaller spec file for Synapse.
 """
 
 block_cipher = None
@@ -68,7 +68,7 @@ hiddenimports = [
 ]
 
 a = Analysis(
-    ['{ROOT_DIR}/ui/spotlight_ui.py'],
+    ['{ROOT_DIR}/ui/synapse_ui.py'],
     pathex=['{ROOT_DIR}'],
     binaries=[],
     datas=datas,
@@ -90,7 +90,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='RAG Spotlight',
+    name='Synapse',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -111,28 +111,28 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='RAG Spotlight',
+    name='Synapse',
 )
 
 app = BUNDLE(
     coll,
-    name='RAG Spotlight.app',
+    name='Synapse.app',
     icon='{ROOT_DIR}/assets/icon.icns' if Path('{ROOT_DIR}/assets/icon.icns').exists() else None,
-    bundle_identifier='com.ragspotlight.app',
+    bundle_identifier='com.synapse.app',
     info_plist={{
-        'CFBundleName': 'RAG Spotlight',
-        'CFBundleDisplayName': 'RAG Spotlight',
+        'CFBundleName': 'Synapse',
+        'CFBundleDisplayName': 'Synapse',
         'CFBundleVersion': '1.0.0',
         'CFBundleShortVersionString': '1.0.0',
         'NSHighResolutionCapable': True,
-        'NSAppleEventsUsageDescription': 'RAG Spotlight needs to control other apps to open documents.',
-        'NSDocumentsFolderUsageDescription': 'RAG Spotlight needs access to your Documents folder to index files.',
-        'NSDesktopFolderUsageDescription': 'RAG Spotlight needs access to your Desktop folder to index files.',
+        'NSAppleEventsUsageDescription': 'Synapse needs to control other apps to open documents.',
+        'NSDocumentsFolderUsageDescription': 'Synapse needs access to your Documents folder to index files.',
+        'NSDesktopFolderUsageDescription': 'Synapse needs access to your Desktop folder to index files.',
     }},
 )
 '''
     
-    spec_path = ROOT_DIR / "RAGSpotlight.spec"
+    spec_path = ROOT_DIR / "Synapse.spec"
     spec_path.write_text(spec_content)
     print(f"✅ Created spec file: {spec_path}")
     return spec_path
@@ -155,7 +155,7 @@ def build_app(spec_path: Path) -> Path | None:
             check=True,
         )
         
-        app_path = ROOT_DIR / "dist" / "RAG Spotlight.app"
+        app_path = ROOT_DIR / "dist" / "Synapse.app"
         if app_path.exists():
             print(f"\n✅ App built successfully: {app_path}")
             return app_path
@@ -172,7 +172,7 @@ def create_dmg(app_path: Path) -> Path | None:
     """Create a DMG installer."""
     print("\n📦 Creating DMG installer...")
     
-    dmg_path = ROOT_DIR / "dist" / "RAG-Spotlight-Installer.dmg"
+    dmg_path = ROOT_DIR / "dist" / "Synapse-Installer.dmg"
     
     # Remove old DMG if exists
     if dmg_path.exists():
@@ -183,7 +183,7 @@ def create_dmg(app_path: Path) -> Path | None:
         subprocess.run(
             [
                 "hdiutil", "create",
-                "-volname", "RAG Spotlight",
+                "-volname", "Synapse",
                 "-srcfolder", str(app_path),
                 "-ov",
                 "-format", "UDZO",
@@ -236,19 +236,19 @@ iconutil -c icns icon.iconset
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Build RAG Spotlight macOS app")
+    parser = argparse.ArgumentParser(description="Build Synapse macOS app")
     parser.add_argument("--dmg", action="store_true", help="Also create DMG installer")
     parser.add_argument("--clean", action="store_true", help="Clean build artifacts first")
     args = parser.parse_args()
     
     print("=" * 60)
-    print("RAG Spotlight - macOS App Builder")
+    print("Synapse - macOS App Builder")
     print("=" * 60)
     
     # Clean if requested
     if args.clean:
         print("\n🧹 Cleaning build artifacts...")
-        for path in ["build", "dist", "RAGSpotlight.spec"]:
+        for path in ["build", "dist", "Synapse.spec"]:
             full_path = ROOT_DIR / path
             if full_path.exists():
                 if full_path.is_dir():
@@ -284,7 +284,7 @@ def main():
     print("=" * 60)
     print(f"App location: {app_path}")
     if args.dmg:
-        print(f"DMG location: {ROOT_DIR / 'dist' / 'RAG-Spotlight-Installer.dmg'}")
+        print(f"DMG location: {ROOT_DIR / 'dist' / 'Synapse-Installer.dmg'}")
     print("\nTo run the app:")
     print(f"  open '{app_path}'")
     print("\nOr double-click it in Finder.")

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Spotlight Launcher with Global Hotkey.
+Synapse Launcher with Global Hotkey.
 
-Runs in the background and listens for a hotkey to launch the Spotlight UI.
+Runs in the background and listens for a hotkey to launch the Synapse UI.
 Default hotkey: Cmd+Shift+Space (macOS) or Ctrl+Shift+Space (Windows/Linux)
 
 Usage:
@@ -11,7 +11,7 @@ Usage:
 The launcher will:
 1. Pre-load the search service for instant startup
 2. Listen for the global hotkey
-3. Launch the Spotlight UI when triggered
+3. Launch the Synapse UI when triggered
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ try:
 except ImportError:
     PYNPUT_AVAILABLE = False
     print("⚠️  pynput not installed. Install with: pip install pynput")
-    print("   Running Spotlight UI directly instead...")
+    print("   Running Synapse UI directly instead...")
 
 
 # Pre-load search service for faster startup
@@ -54,12 +54,12 @@ def preload_search_service():
         _loading = False
 
 
-def launch_spotlight():
-    """Launch the Spotlight UI."""
-    print("🔍 Launching Spotlight...")
+def launch_synapse():
+    """Launch the Synapse UI."""
+    print("🔍 Launching Synapse...")
     
     # Run the UI script
-    ui_script = ROOT_DIR / "ui" / "spotlight_ui.py"
+    ui_script = ROOT_DIR / "ui" / "synapse_ui.py"
     subprocess.Popen(
         [sys.executable, str(ui_script)],
         cwd=str(ROOT_DIR),
@@ -69,17 +69,17 @@ def launch_spotlight():
 
 def on_hotkey():
     """Callback when hotkey is pressed."""
-    launch_spotlight()
+    launch_synapse()
 
 
 def run_with_hotkey():
     """Run the launcher with global hotkey listener."""
     print("=" * 50)
-    print("🚀 Spotlight Launcher")
+    print("🚀 Synapse Launcher")
     print("=" * 50)
     print()
     print("Hotkey: Cmd+Shift+Space (macOS) or Ctrl+Shift+Space")
-    print("Press the hotkey to open Spotlight")
+    print("Press the hotkey to open Synapse")
     print("Press Ctrl+C to quit")
     print()
     
@@ -121,8 +121,8 @@ def run_with_hotkey():
 
 
 def run_direct():
-    """Run the Spotlight UI directly (no hotkey)."""
-    launch_spotlight()
+    """Run the Synapse UI directly (no hotkey)."""
+    launch_synapse()
 
 
 def main():

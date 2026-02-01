@@ -1,5 +1,5 @@
 """
-RAG Spotlight Startup Module.
+Synapse Startup Module.
 
 Handles initialization tasks:
 - Auto-migrate JSON manifest to SQLite
@@ -169,7 +169,7 @@ def print_startup_info() -> None:
     info = initialize()
     
     print("=" * 50)
-    print("RAG Spotlight - Startup Check")
+    print("Synapse - Startup Check")
     print("=" * 50)
     
     if info["success"]:

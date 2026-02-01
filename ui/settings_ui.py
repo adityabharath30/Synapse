@@ -1,5 +1,5 @@
 """
-Settings UI for RAG Spotlight.
+Settings UI for Synapse.
 
 Provides a graphical interface to configure scanner settings
 instead of editing YAML files manually.
@@ -26,7 +26,7 @@ import yaml
 from app.config import SCANNER_CONFIG_PATH, DATA_DIR
 
 
-# Color scheme matching spotlight_ui
+# Color scheme matching synapse_ui
 COLORS = {
     "bg": "#1a1a1a",
     "bg_secondary": "#252525",
@@ -55,7 +55,7 @@ class SettingsUI:
 
         # Create window
         self.root = ctk.CTk()
-        self.root.title("RAG Spotlight Settings")
+        self.root.title("Synapse Settings")
         self.root.geometry("600x700")
         self.root.configure(fg_color=COLORS["bg"])
         

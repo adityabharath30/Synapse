@@ -1,20 +1,20 @@
-# Personal Spotlight Search
+# Synapse
 
-[![CI](https://github.com/adityabharath30/RAG-Spotlight/actions/workflows/ci.yml/badge.svg)](https://github.com/adityabharath30/RAG-Spotlight/actions/workflows/ci.yml)
+[![CI](https://github.com/adityabharath30/Synapse/actions/workflows/ci.yml/badge.svg)](https://github.com/adityabharath30/Synapse/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A local, Spotlight-style semantic search system for your personal documents. Ask questions in natural language and get precise, extractive answers powered by GPT-4o-mini.
+A local semantic search system for your personal documents. Ask questions in natural language and get precise, extractive answers powered by GPT-4o-mini.
 
 <!-- Demo GIF placeholder - replace with actual recording -->
-![Spotlight Demo](docs/demo.gif)
+![Synapse Demo](docs/demo.gif)
 
 ## Features
 
 - 🔍 **Semantic Search** — Find documents by meaning, not just keywords
 - 🤖 **GPT-Powered Extraction** — Get precise answers, not document dumps
 - ⚡ **Instant Results** — Sub-second search with cached embeddings
-- ⌨️ **Keyboard-First** — Spotlight-style UX with global hotkey (⌘+Shift+Space)
+- ⌨️ **Keyboard-First** — Global hotkey (⌘+Shift+Space) for instant access
 - 📁 **Device-Wide Scanning** — Index documents across your entire Mac
 - 🔒 **Privacy-First** — Encrypted storage, audit logging, local embeddings
 - 🖼️ **Image Support** — Extract text and descriptions from images via Vision API
@@ -35,7 +35,7 @@ A local, Spotlight-style semantic search system for your personal documents. Ask
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           USER INTERFACE                                     │
-│  spotlight_ui.py                    launcher.py (⌘+Shift+Space)             │
+│  synapse_ui.py                      launcher.py (⌘+Shift+Space)             │
 └─────────────────────────────────────┬───────────────────────────────────────┘
                                       │
                                       ▼
@@ -74,8 +74,8 @@ A local, Spotlight-style semantic search system for your personal documents. Ask
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/adityabharath30/RAG-Spotlight.git
-cd RAG-Spotlight
+git clone https://github.com/adityabharath30/Synapse.git
+cd Synapse
 pip install -r requirements.txt
 
 # 2. Add your OpenAI API key
@@ -87,8 +87,8 @@ echo "OPENAI_API_KEY=sk-your-key-here" > .env
 # 4. Build the index
 python scripts/watcher.py --scan-now
 
-# 5. Launch Spotlight UI
-python ui/spotlight_ui.py
+# 5. Launch Synapse UI
+python ui/synapse_ui.py
 ```
 
 ## Usage
@@ -96,7 +96,7 @@ python ui/spotlight_ui.py
 ### Search UI
 
 ```bash
-python ui/spotlight_ui.py
+python ui/synapse_ui.py
 ```
 
 | Key | Action |
@@ -228,7 +228,7 @@ RAG/
 │   └── privacy.py           # Data export/deletion CLI
 │
 ├── ui/
-│   └── spotlight_ui.py      # CustomTkinter Spotlight UI
+│   └── synapse_ui.py        # CustomTkinter Synapse UI
 │
 ├── scripts/
 │   ├── watcher.py           # Device scanner + real-time watcher
@@ -246,7 +246,7 @@ RAG/
 
 Run from project root:
 ```bash
-cd /path/to/RAG-Spotlight
+cd /path/to/Synapse
 python scripts/watcher.py
 ```
 

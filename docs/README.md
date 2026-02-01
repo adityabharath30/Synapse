@@ -13,7 +13,7 @@ This folder is for testing the RAG system with sample documents.
 
 1. Place sample documents in this folder
 2. Run `python scripts/index_builder.py` to index them
-3. Use the Spotlight UI to search
+3. Use the Synapse UI to search
 
 ## Device-Wide Scanning
 

@@ -1,1 +1,1 @@
-"""UI package for the Spotlight-style search app."""
+"""UI package for Synapse search app."""

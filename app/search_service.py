@@ -42,7 +42,7 @@ logger = logging.getLogger("rag")
 
 class SearchService:
     """
-    Main search service for Spotlight-style queries.
+    Main search service for Synapse queries.
     
     Pipeline:
     1. Embed query and retrieve top-k chunks from FAISS
@@ -71,7 +71,7 @@ class SearchService:
 
     def answer(self, query: str, top_k: int = 6) -> dict[str, Any]:
         """
-        Main entry point for Spotlight-style factual recall.
+        Main entry point for Synapse factual recall.
         
         This is the "I know this fact exists somewhere — find it" interface.
         Returns a short, direct, extractive answer when possible.
