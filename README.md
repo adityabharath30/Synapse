@@ -3,11 +3,8 @@
 [![CI](https://github.com/adityabharath30/Synapse/actions/workflows/ci.yml/badge.svg)](https://github.com/adityabharath30/Synapse/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-There's moments where you want to find you credit card number quick, or the dates for your hotel bookings but don't want to dig through files. Ther**e's moments where you might even forget where you stored all that information. For that: there's Synapse. **Spotlight indexes _files_, Synapse indexes _context_**
-A local semantic search system for your personal documents. Ask questions in natural language and get precise, extractive answers powered by GPT-4o-mini.
-
-<!-- Demo GIF placeholder - replace with actual recording -->
-![Synapse Demo](docs/demo.gif)
+There's moments where you want to find you credit card number quick, or the dates for your hotel bookings but don't want to dig through files. Ther**e's moments where you might even forget where you stored all that information. For that: there's Synapse. **Spotlight indexes _files_, Synapse indexes _context_**.
+It's a local semantic search system for your personal documents. Ask questions in natural language and get precise, extractive answers.
 
 ## Features
 
